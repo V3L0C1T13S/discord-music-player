@@ -6,7 +6,6 @@
 import { EventEmitter } from "events";
 import {
     AudioPlayer,
-    AudioPlayerError,
     AudioPlayerStatus,
     AudioResource,
     createAudioPlayer,

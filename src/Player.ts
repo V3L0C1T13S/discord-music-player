@@ -40,9 +40,13 @@ export class Player extends EventEmitter {
          */
         this.queues = new Collection<Snowflake, Queue>();
 
-        this.client.on('voiceStateUpdate',
-            (oldState, newState) =>
+        this.client.on("voiceStateUpdate",
+            (oldState, newState) => {
+                // st00pid discord.js
+                if (!oldState) return;
+
                 this._voiceUpdate(oldState, newState)
+            }
         );
     }
 

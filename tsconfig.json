@@ -9,7 +9,8 @@
     "strict": true,
     "esModuleInterop": true,
     "pretty": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
   },
   "include": [
     "src/**/*"

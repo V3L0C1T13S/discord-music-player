@@ -15,7 +15,9 @@ import {
     StreamType,
     VoiceConnection,
     VoiceConnectionStatus,
-    VoiceConnectionDisconnectReason
+    VoiceConnectionDisconnectReason,
+    VoiceConnectionState,
+    AudioPlayerState
 } from "@discordjs/voice";
 import {StageChannel, VoiceChannel} from "discord.js";
 import { promisify } from 'util';
@@ -57,26 +59,29 @@ export class StreamConnection extends EventEmitter {
          */
         this.channel = channel;
 
-        this.connection.on('stateChange', async (oldState, newState) => {
-            if (newState.status === VoiceConnectionStatus.Disconnected) {
-                if (newState.reason === VoiceConnectionDisconnectReason.WebSocketClose && newState.closeCode === 4014) {
-                    try {
-                        // Attempting to re-join the voice channel, after possibly changing channels
-                        await entersState(this.connection, VoiceConnectionStatus.Connecting, 5_000);
-                    } catch {
-                        // It was mannually disconnected and the connection is closed in Player.js _voiceUpdate
-                    }
-                } else if (this.connection.rejoinAttempts < 5) {
-                    await wait((this.connection.rejoinAttempts + 1) * 5_000);
-                    this.connection.rejoin();
-                } else {
-                    this.leave();
+        this.connection.on(VoiceConnectionStatus.Disconnected, async (oldState, newState) => {
+            if (newState.reason === VoiceConnectionDisconnectReason.WebSocketClose && newState.closeCode === 4014) {
+                try {
+                    await entersState(this.connection, VoiceConnectionStatus.Connecting, 5_000);
+                } catch {
+                    // manually disconnected
                 }
-            } else if (newState.status === VoiceConnectionStatus.Destroyed) {
-                this.stop();
-            } else if (
+            } else if (this.connection.rejoinAttempts < 5) {
+                await wait((this.connection.rejoinAttempts +1) * 5_000);
+                this.connection.rejoin();
+            } else {
+                this.leave();
+            }
+        });
+
+        this.connection.on(VoiceConnectionStatus.Destroyed, async () => {
+            this.stop();
+        });
+
+        const onConnectionConnectingOrSig = async (oldState: VoiceConnectionState, newState: VoiceConnectionState) => {
+            if (
                 !this.readyLock &&
-                (newState.status === VoiceConnectionStatus.Connecting || newState.status === VoiceConnectionStatus.Signalling)
+                (newState.status === VoiceConnectionStatus.Connecting || newState.status === VoiceConnectionStatus.Ready)
             ) {
                 this.readyLock = true;
                 try {
@@ -87,23 +92,32 @@ export class StreamConnection extends EventEmitter {
                     this.readyLock = false;
                 }
             }
-        });
+        }
+
+        this.connection.on(VoiceConnectionStatus.Connecting, onConnectionConnectingOrSig);
+
+        this.connection.on(VoiceConnectionStatus.Signalling, onConnectionConnectingOrSig);
+
+        const playerStateChange = async (oldState: AudioPlayerState, newState: AudioPlayerState) => {
+            if (newState.status === AudioPlayerStatus.Idle && oldState.status !== AudioPlayerStatus.Idle) {
+                if (!this.paused) {
+                    this.emit('end', this.resource);
+                    delete this.resource;
+                    return;
+                }
+            } else if (newState.status === AudioPlayerStatus.Playing) {
+                if (!this.paused) {
+                    this.emit('start', this.resource);
+                    return;
+                }
+            }
+        }
 
         this.player
-            .on('stateChange', (oldState, newState) => {
-                if (newState.status === AudioPlayerStatus.Idle && oldState.status !== AudioPlayerStatus.Idle) {
-                    if (!this.paused) {
-                        this.emit('end', this.resource);
-                        delete this.resource;
-                        return;
-                    }
-                } else if (newState.status === AudioPlayerStatus.Playing) {
-                    if (!this.paused) {
-                        this.emit('start', this.resource);
-                        return;
-                    }
-                }
-            })
+            .on("stateChange", (oldState) => {});
+        this.player
+            .on(AudioPlayerStatus.Idle, playerStateChange)
+            .on(AudioPlayerStatus.Playing, playerStateChange)
             .on('error', data => {
                 this.emit('error', data);
             });

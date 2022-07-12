@@ -4,9 +4,10 @@ import {
     DefaultPlayerOptions, DefaultPlayOptions, DefaultPlaylistOptions,
     RawSong, RawPlaylist,
 } from "..";
-import { User } from "discord.js";
 import YTSR, { Video } from 'ytsr';
-import {getData, getPreview } from "spotify-url-info";
+import axios from "axios";
+import spotifyinfo from "spotify-url-info";
+const { getData, getPreview } = spotifyinfo(axios);
 import { getSong, getPlaylist } from "./AppleUtils";
 import {Client, Video as IVideo, VideoCompact, Playlist as IPlaylist} from "youtubei";
 let YouTube = new Client();
